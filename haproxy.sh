@@ -1,44 +1,40 @@
-#! /bin/bash
-PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
-export PATH
-#=================================================================#
-#   System Required:  CentOS, Debian, Ubuntu                      #
-#   Description: Install haproxy for Shadowsocks server           #
-#   Author: Teddysun <i@teddysun.com>                             #
-#   Intro:  https://shadowsocks.be/10.html                        #
-#=================================================================#
+#!/usr/bin/env bash
+#
+# System Required:  CentOS, Debian, Ubuntu
+#
+# Description: Install haproxy for Shadowsocks server
+#
+# Author: Teddysun <i@teddysun.com>
+#
+# Intro:  https://shadowsocks.be/10.html
+#
+
+[[ $EUID -ne 0 ]] && echo "Error: This script must be run as root!" && exit 1
 
 clear
-echo ""
+echo
 echo "#############################################################"
 echo "# Install haproxy for Shadowsocks server                    #"
 echo "# Intro: https://shadowsocks.be/10.html                     #"
 echo "# Author: Teddysun <i@teddysun.com>                         #"
 echo "#############################################################"
-echo ""
-
-rootness(){
-    if [[ $EUID -ne 0 ]]; then
-       echo "Error:This script must be run as root!" 1>&2
-       exit 1
-    fi
-}
+echo
 
 checkos(){
-    if [[ -f /etc/redhat-release ]];then
-        OS=CentOS
-    elif cat /etc/issue | grep -q -E -i "debian";then
-        OS=Debian
-    elif cat /etc/issue | grep -q -E -i "ubuntu";then
-        OS=Ubuntu
-    elif cat /etc/issue | grep -q -E -i "centos|red hat|redhat";then
-        OS=CentOS
-    elif cat /proc/version | grep -q -E -i "debian";then
-        OS=Debian
-    elif cat /proc/version | grep -q -E -i "ubuntu";then
-        OS=Ubuntu
-    elif cat /proc/version | grep -q -E -i "centos|red hat|redhat";then
-        OS=CentOS
+    if [[ -f /etc/redhat-release ]]; then
+        OS="centos"
+    elif cat /etc/issue | grep -Eqi "debian"; then
+        OS="debian"
+    elif cat /etc/issue | grep -Eqi "ubuntu"; then
+        OS="ubuntu"
+    elif cat /etc/issue | grep -Eqi "centos|red hat|redhat"; then
+        OS="centos"
+    elif cat /proc/version | grep -Eqi "debian"; then
+        OS="debian"
+    elif cat /proc/version | grep -Eqi "ubuntu"; then
+        OS="ubuntu"
+    elif cat /proc/version | grep -Eqi "centos|red hat|redhat"; then
+        OS="centos"
     else
         echo "Not supported OS, Please reinstall OS and try again."
         exit 1
@@ -53,8 +49,8 @@ disable_selinux(){
 }
 
 valid_ip(){
-    local  ip=$1
-    local  stat=1
+    local ip=$1
+    local stat=1
     if [[ $ip =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
         OIFS=$IFS
         IFS='.'
@@ -67,66 +63,66 @@ valid_ip(){
 }
 
 get_ip(){
-    local IP=$( ip addr | egrep -o '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' | egrep -v "^192\.168|^172\.1[6-9]\.|^172\.2[0-9]\.|^172\.3[0-2]\.|^10\.|^127\.|^255\." | head -n 1 )
-    if [ -z ${IP} ]; then
-        IP=$( wget -qO- -t1 -T2 ipv4.icanhazip.com )
-    fi
-    echo ${IP}
+    local IP=$( ip addr | egrep -o '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' | egrep -v "^192\.168|^172\.1[6-9]\.|^172\.2[0-9]\.|^172\.3[0-2]\.|^10\.|^127\.|^255\.|^0\." | head -n 1 )
+    [ -z ${IP} ] && IP=$( wget -qO- -t1 -T2 ipv4.icanhazip.com )
+    [ -z ${IP} ] && IP=$( wget -qO- -t1 -T2 ipinfo.io/ip )
+    [ ! -z ${IP} ] && echo ${IP} || echo
+}
+
+get_char(){
+    SAVEDSTTY=`stty -g`
+    stty -echo
+    stty cbreak
+    dd if=/dev/tty bs=1 count=1 2> /dev/null
+    stty -raw
+    stty echo
+    stty $SAVEDSTTY
 }
 
 # Pre-installation settings
-function pre_install(){
+pre_install(){
     # Set haproxy config port
     while :
     do
-    echo -e "Please input port for haproxy & shadowsocks [1-65535]"
+    echo -e "Please enter a port for haproxy and Shadowsocks server [1-65535]"
     read -p "(Default port: 8989):" haproxyport
     [ -z "${haproxyport}" ] && haproxyport="8989"
     expr ${haproxyport} + 0 &>/dev/null
     if [ $? -eq 0 ]; then
         if [ ${haproxyport} -ge 1 ] && [ ${haproxyport} -le 65535 ]; then
-            echo ""
+            echo
             echo "---------------------------"
             echo "port = ${haproxyport}"
             echo "---------------------------"
-            echo ""
+            echo
             break
         else
-            echo "Input error! Please input correct numbers."
+            echo "Enter error! Please enter a correct number."
         fi
     else
-        echo "Input error! Please input correct numbers."
+        echo "Enter error! Please enter a correct number."
     fi
     done
 
     # Set haproxy config IPv4 address
     while :
     do
-    echo -e "Please input your shadowsocks IPv4 address for haproxy"
+    echo -e "Please enter your Shadowsocks server's IPv4 address for haproxy"
     read -p "(IPv4 is):" haproxyip
     valid_ip ${haproxyip}
     if [ $? -eq 0 ]; then
-        echo ""
+        echo
         echo "---------------------------"
         echo "IP = ${haproxyip}"
         echo "---------------------------"
-        echo ""
+        echo
         break
     else
-        echo "Input error! Please input correct IPv4 address."
+        echo "Enter error! Please enter correct IPv4 address."
     fi
     done
 
-    get_char(){
-        SAVEDSTTY=`stty -g`
-        stty -echo
-        stty cbreak
-        dd if=/dev/tty bs=1 count=1 2> /dev/null
-        stty -raw
-        stty echo
-        stty $SAVEDSTTY
-    }
-    echo ""
+    echo
     echo "Press any key to start...or Press Ctrl+C to cancel"
     char=`get_char`
 
@@ -135,13 +131,13 @@ function pre_install(){
 # Config haproxy
 config_haproxy(){
     # Config DNS nameserver
-    if ! grep -q "8.8.8.8" /etc/resolv.conf;then
+    if ! grep -q "8.8.8.8" /etc/resolv.conf; then
         cp -p /etc/resolv.conf /etc/resolv.conf.bak
         echo "nameserver 8.8.8.8" > /etc/resolv.conf
         echo "nameserver 8.8.4.4" >> /etc/resolv.conf
     fi
 
-    if [ -f /etc/haproxy/haproxy.cfg ];then
+    if [ -f /etc/haproxy/haproxy.cfg ]; then
         cp -p /etc/haproxy/haproxy.cfg /etc/haproxy/haproxy.cfg.bak
     fi
 
@@ -173,7 +169,7 @@ EOF
 
 install(){
     # Install haproxy
-    if [ "${OS}" == 'CentOS' ];then
+    if [ "${OS}" == "centos" ]; then
         yum install -y haproxy
     else
         apt-get -y update
@@ -187,7 +183,7 @@ install(){
         config_haproxy
         echo "Config haproxy completed..."
 
-        if [ "${OS}" == 'CentOS' ]; then
+        if [ "${OS}" == "centos" ]; then
             chkconfig --add haproxy
             chkconfig haproxy on
         else
@@ -202,7 +198,7 @@ install(){
             echo "haproxy start failure..."
         fi
     else
-        echo ""
+        echo
         echo "haproxy install failed."
         exit 1
     fi
@@ -214,25 +210,23 @@ install(){
     netstat -nxtlp
     echo
     echo "Congratulations, haproxy install completed."
-    echo -e "Your haproxy Server IP: \033[41;37m `get_ip` \033[0m"
+    echo -e "Your haproxy Server IP: \033[41;37m $(get_ip) \033[0m"
     echo -e "Your haproxy Server port: \033[41;37m ${haproxyport} \033[0m"
     echo -e "Your Input Shadowsocks IP: \033[41;37m ${haproxyip} \033[0m"
     echo
-    echo "Welcome to visit:https://shadowsocks.be/10.html"
+    echo "Welcome to visit: https://shadowsocks.be/10.html"
     echo "Enjoy it."
     echo
-    exit 0
 }
 
 
 # Install haproxy
 install_haproxy(){
     checkos
-    rootness
     disable_selinux
     pre_install
     install
 }
 
 # Initialization step
-install_haproxy 2>&1 | tee -a /root/haproxy_for_shadowsocks.log
+install_haproxy 2>&1 | tee ~/haproxy_for_shadowsocks.log
